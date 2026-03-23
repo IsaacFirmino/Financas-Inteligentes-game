@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finanças Inteligentes</title>
+    <!-- Tailwind CSS para um design moderno e responsivo -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Pequena animação de transição (fade in) para as trocas de tela */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* Efeito de brilho para IA */
+        .glow-ai {
+            box-shadow: 0 0 15px rgba(147, 51, 234, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen flex items-center justify-center font-sans p-4 text-slate-800">
+
+    <!-- Cartão Principal do Jogo -->
+    <div class="bg-white p-6 md:p-8 rounded-2xl shadow-xl max-w-lg w-full relative">
+        
+        <!-- Barra de Status (Escondida no início) -->
+        <div id="status-bar" class="hidden flex justify-between items-center mb-6 bg-slate-50 p-3 rounded-lg border border-slate-200">
+            <div class="font-bold text-slate-700">
+                💰 Saldo: <span id="saldo-display" class="text-green-600">R$ 1000.00</span>
+            </div>
+            <div class="font-bold text-slate-700">
+                ⭐ Pontos: <span id="pontos-display" class="text-blue-600">0</span>
+            </div>
+        </div>
+
+        <!-- Área onde o conteúdo do jogo vai aparecer -->
+        <div id="game-content" class="fade-in text-center">
+            <!-- O conteúdo inicial é injetado aqui via JavaScript -->
+        </div>
+
+    </div>
+
+    <script>
+        // --- CONFIGURAÇÃO GEMINI API ---
+        const apiKey = ""; // A chave será providenciada pelo ambiente
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'financas-inteligentes';
+
+        // --- VARIÁVEIS DO JOGO ---
+        let saldo = 1000;
+        let pontuacao = 0;
+        let passoAtual = 0; 
+        let escolhasFeitas = []; // Armazena as escolhas para a IA analisar
+
+        // Elementos do HTML
+        const gameContent = document.getElementById('game-content');
+        const statusBar = document.getElementById('status-bar');
+        const saldoDisplay = document.getElementById('saldo-display');
+        const pontosDisplay = document.getElementById('pontos-display');
+
+        // --- DADOS DAS FASES ---
+
+        const perguntasOrcamento = [
+            {
+                categoria: "🍔 Alimentação",
+                pergunta: "Como você vai gerir sua alimentação este mês?",
+                opcoes: [
+                    { texto: "Cozinhar sempre em casa (R$ 200)", custo: 200, feedback: "Excelente! Cozinhar em casa é a melhor forma de economizar." },
+                    { texto: "Misto (Casa e Fast Food) (R$ 400)", custo: 400, feedback: "Equilibrado, mas cuidado com os excessos." },
+                    { texto: "Comer sempre fora/Delivery (R$ 600)", custo: 600, feedback: "Isso é muito caro! Vai pesar no seu orçamento." }
+                ]
+            },
+            {
+                categoria: "🚌 Transporte",
+                pergunta: "Como você vai se deslocar para o trabalho/estudos?",
+                opcoes: [
+                    { texto: "Transporte Público (R$ 100)", custo: 100, feedback: "Econômico e ajuda a poupar." },
+                    { texto: "Aplicativos (Uber/99) (R$ 250)", custo: 250, feedback: "Confortável, mas leva uma boa parte do salário." },
+                    { texto: "Carro Próprio (Combustível) (R$ 400)", custo: 400, feedback: "Os custos com combustível e manutenção são altos." }
+                ]
+            },
+            {
+                categoria: "🎬 Lazer",
+                pergunta: "O que você vai fazer para se divertir?",
+                opcoes: [
+                    { texto: "Parques e eventos gratuitos (R$ 0)", custo: 0, feedback: "Diversão garantida sem gastar um centavo!" },
+                    { texto: "Cinema e um lanche (R$ 100)", custo: 100, feedback: "Lazer saudável e com orçamento controlado." },
+                    { texto: "Festas e shows caros (R$ 300)", custo: 300, feedback: "Cuidado para não gastar tudo só em diversão!" }
+                ]
+            }
+        ];
+
+        const perguntasQuiz = [
+            {
+                pergunta: "O que é uma 'Despesa Fixa'?",
+                opcoes: [
+                    { texto: "Um gasto que ocorre todos os meses (ex: aluguel, internet).", correta: true },
+                    { texto: "Um gasto inesperado (ex: celular quebrado).", correta: false }
+                ]
+            },
+            {
+                pergunta: "Para que serve a 'Reserva de Emergência'?",
+                opcoes: [
+                    { texto: "Para comprar jogos novos.", correta: false },
+                    { texto: "Para cobrir imprevistos e dar segurança financeira.", correta: true }
+                ]
+            },
+            {
+                pergunta: "Qual destas opções de investimento costuma render mais a longo prazo?",
+                opcoes: [
+                    { texto: "Deixar o dinheiro parado na conta corrente.", correta: false },
+                    { texto: "Investir em um CDB ou Tesouro Direto.", correta: true }
+                ]
+            }
+        ];
+
+        const opcoesInvestimento = [
+            { texto: "Esconder em casa (0% de rendimento)", taxa: 0, msg: "O dinheiro parado perde valor para a inflação." },
+            { texto: "Poupança (0.5% ao mês)", taxa: 0.005, msg: "Seguro, mas o rendimento é muito baixo." },
+            { texto: "CDB (1% ao mês)", taxa: 0.01, msg: "Excelente escolha! Seu dinheiro está trabalhando para você." }
+        ];
+
+        // --- FUNÇÕES DO JOGO ---
+
+        function atualizarStatus() {
+            saldoDisplay.innerText = `R$ ${saldo.toFixed(2)}`;
+            pontosDisplay.innerText = pontuacao;
+            if (saldo < 0) {
+                saldoDisplay.classList.replace('text-green-600', 'text-red-600');
+            } else {
+                saldoDisplay.classList.replace('text-red-600', 'text-green-600');
+            }
+        }
+
+        function iniciarJogo() {
+            statusBar.classList.remove('hidden');
+            passoAtual = 0;
+            escolhasFeitas = [];
+            mostrarOrcamento();
+        }
+
+        function mostrarOrcamento() {
+            if (passoAtual < perguntasOrcamento.length) {
+                const etapa = perguntasOrcamento[passoAtual];
+                let html = `
+                    <div class="fade-in">
+                        <span class="text-sm font-bold text-blue-500 uppercase tracking-wider">Fase 1: Orçamento</span>
+                        <h2 class="text-2xl font-bold mt-2 mb-6">${etapa.categoria}</h2>
+                        <p class="text-slate-600 mb-6">${etapa.pergunta}</p>
+                        <div class="flex flex-col gap-3">
+                `;
+                
+                etapa.opcoes.forEach((opcao) => {
+                    html += `<button onclick="escolherOrcamento(${opcao.custo}, '${opcao.feedback}', '${opcao.texto}')" 
+                                class="bg-slate-100 hover:bg-blue-100 border border-slate-300 hover:border-blue-400 text-slate-700 font-semibold py-3 px-4 rounded-lg transition duration-200 w-full text-left">
+                                ${opcao.texto}
+                             </button>`;
+                });
+                
+                html += `</div></div>`;
+                gameContent.innerHTML = html;
+            } else {
+                passoAtual = 0;
+                mostrarAlertaFase("Chegou a hora de testar seus conhecimentos!", mostrarQuiz);
+            }
+        }
+
+        function escolherOrcamento(custo, feedback, textoOpcao) {
+            saldo -= custo;
+            escolhasFeitas.push(textoOpcao);
+            atualizarStatus();
+            mostrarFeedbackTemporario(feedback, () => {
+                passoAtual++;
+                mostrarOrcamento();
+            });
+        }
+
+        function mostrarQuiz() {
+            if (passoAtual < perguntasQuiz.length) {
+                const etapa = perguntasQuiz[passoAtual];
+                let html = `
+                    <div class="fade-in">
+                        <span class="text-sm font-bold text-purple-500 uppercase tracking-wider">Fase 2: Quiz Financeiro</span>
+                        <h2 class="text-xl font-bold mt-2 mb-6">${etapa.pergunta}</h2>
+                        <div class="flex flex-col gap-3">
+                `;
+                
+                etapa.opcoes.forEach((opcao) => {
+                    html += `<button onclick="responderQuiz(${opcao.correta})" 
+                                class="bg-slate-100 hover:bg-purple-100 border border-slate-300 hover:border-purple-400 text-slate-700 font-semibold py-3 px-4 rounded-lg transition duration-200 w-full text-left">
+                                ${opcao.texto}
+                             </button>`;
+                });
+                
+                html += `</div></div>`;
+                gameContent.innerHTML = html;
+            } else {
+                mostrarAlertaFase("Vamos ver o que fazer com o dinheiro que sobrou!", prepararInvestimento);
+            }
+        }
+
+        function responderQuiz(correta) {
+            if (correta) {
+                pontuacao += 10;
+                atualizarStatus();
+                mostrarFeedbackTemporario("✅ Resposta Correta! Você ganhou 10 pontos.", () => {
+                    passoAtual++;
+                    mostrarQuiz();
+                }, "text-green-600");
+            } else {
+                mostrarFeedbackTemporario("❌ Resposta Incorreta.", () => {
+                    passoAtual++;
+                    mostrarQuiz();
+                }, "text-red-600");
+            }
+        }
+
+        function prepararInvestimento() {
+            if (saldo <= 0) {
+                gameContent.innerHTML = `
+                    <div class="fade-in">
+                        <span class="text-sm font-bold text-orange-500 uppercase tracking-wider">Fase 3: Investimentos</span>
+                        <h2 class="text-2xl font-bold mt-2 mb-4">Sem dinheiro para investir 😢</h2>
+                        <p class="text-slate-600 mb-6">Você gastou todo o seu salário. Não é possível investir este mês.</p>
+                        <button onclick="mostrarResultadoFinal()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg w-full">Ver Resultado Final</button>
+                    </div>
+                `;
+            } else {
+                let html = `
+                    <div class="fade-in">
+                        <span class="text-sm font-bold text-orange-500 uppercase tracking-wider">Fase 3: Investimentos</span>
+                        <h2 class="text-2xl font-bold mt-2 mb-2">Sobraram R$ ${saldo.toFixed(2)}!</h2>
+                        <p class="text-slate-600 mb-6">Onde você deseja guardar ou investir este valor?</p>
+                        <div class="flex flex-col gap-3">
+                `;
+                
+                opcoesInvestimento.forEach((opcao) => {
+                    html += `<button onclick="calcularInvestimento(${opcao.taxa}, '${opcao.msg}', '${opcao.texto}')" 
+                                class="bg-slate-100 hover:bg-orange-100 border border-slate-300 hover:border-orange-400 text-slate-700 font-semibold py-3 px-4 rounded-lg transition duration-200 w-full text-left">
+                                ${opcao.texto}
+                             </button>`;
+                });
+                
+                html += `</div></div>`;
+                gameContent.innerHTML = html;
+            }
+        }
+
+        function calcularInvestimento(taxa, msg, textoOpcao) {
+            const rendimento = saldo * taxa;
+            saldo += rendimento;
+            escolhasFeitas.push(`Investimento: ${textoOpcao}`);
+            
+            if (taxa > 0) pontuacao += 10; 
+            if (taxa >= 0.01) pontuacao += 10;
+
+            atualizarStatus();
+            mostrarFeedbackTemporario(`Rendeu R$ ${rendimento.toFixed(2)}! <br> ${msg}`, mostrarResultadoFinal, "text-orange-600");
+        }
+
+        function mostrarResultadoFinal() {
+            statusBar.classList.add('hidden');
+
+            let mensagemFinal = "";
+            let corMensagem = "";
+
+            if (saldo < 0) {
+                mensagemFinal = "Você terminou o mês com dívidas. Precisa rever urgentemente seu orçamento!";
+                corMensagem = "text-red-600";
+            } else if (saldo === 0) {
+                mensagemFinal = "Você sobreviveu ao mês, mas não conseguiu poupar nada.";
+                corMensagem = "text-yellow-600";
+            } else {
+                mensagemFinal = "Parabéns! Você foi um mestre nas finanças.";
+                corMensagem = "text-green-600";
+            }
+
+            gameContent.innerHTML = `
+                <div class="fade-in">
+                    <h1 class="text-3xl font-bold text-slate-800 mb-6">Fim de Jogo! 🏆</h1>
+                    
+                    <div class="bg-slate-50 border border-slate-200 rounded-lg p-6 mb-4 text-left">
+                        <p class="text-lg mb-2">💰 Saldo Final: <strong class="${saldo >= 0 ? 'text-green-600' : 'text-red-600'}">R$ ${saldo.toFixed(2)}</strong></p>
+                        <p class="text-lg">⭐ Pontuação: <strong class="text-blue-600">${pontuacao} pontos</strong></p>
+                    </div>
+
+                    <p class="text-lg font-semibold ${corMensagem} mb-6">${mensagemFinal}</p>
+
+                    <div id="ai-section" class="mb-6">
+                        <button onclick="consultarIA()" class="glow-ai bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg w-full flex items-center justify-center gap-2 transition duration-200">
+                            ✨ Consultoria de IA Personalizada
+                        </button>
+                    </div>
+
+                    <button onclick="location.reload()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-200 mb-4">
+                        Jogar Novamente
+                    </button>
+                </div>
+            `;
+        }
+
+        // --- INTEGRAÇÃO GEMINI API ✨ ---
+
+        async function consultarIA() {
+            const aiSection = document.getElementById('ai-section');
+            aiSection.innerHTML = `
+                <div class="flex flex-col items-center py-4 text-purple-600">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-2"></div>
+                    <p class="text-sm font-semibold">Analisando seu perfil financeiro...</p>
+                </div>
+            `;
+
+            const prompt = `Analise o desempenho deste jogador no jogo "Finanças Inteligentes". 
+            Saldo Final: R$ ${saldo.toFixed(2)}. 
+            Pontuação do Quiz: ${pontuacao}. 
+            Escolhas de Orçamento: ${escolhasFeitas.join(", ")}.
+            Forneça um feedback curto (máximo 3 frases) e motivador em Português do Brasil (PT-BR), dando uma dica prática para melhorar na vida real.`;
+
+            const systemPrompt = "Você é um consultor financeiro inteligente e amigável que dá dicas curtas e valiosas usando o Português do Brasil.";
+
+            try {
+                let retryCount = 0;
+                let result;
+                
+                while (retryCount < 5) {
+                    try {
+                        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                contents: [{ parts: [{ text: prompt }] }],
+                                systemInstruction: { parts: [{ text: systemPrompt }] }
+                            })
+                        });
+                        result = await response.json();
+                        if (response.ok) break;
+                    } catch (e) {
+                        retryCount++;
+                        await new Promise(r => setTimeout(r, Math.pow(2, retryCount) * 1000));
+                    }
+                }
+
+                const feedbackText = result.candidates?.[0]?.content?.parts?.[0]?.text || "Não foi possível contatar o consultor agora. Tente economizar mais dinheiro no próximo mês!";
+
+                aiSection.innerHTML = `
+                    <div class="bg-purple-50 border border-purple-200 rounded-lg p-4 text-left fade-in">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-xl">✨</span>
+                            <h4 class="font-bold text-purple-800">Dica da IA</h4>
+                        </div>
+                        <p class="text-slate-700 text-sm italic mb-4 leading-relaxed">"${feedbackText}"</p>
+                        <button onclick="ouvirDica('${feedbackText.replace(/'/g, "\\'")}')" class="text-xs bg-purple-200 hover:bg-purple-300 text-purple-800 py-1 px-3 rounded flex items-center gap-1 transition">
+                             🔊 Ouvir Dica
+                        </button>
+                    </div>
+                `;
+            } catch (error) {
+                aiSection.innerHTML = `<p class="text-red-500 text-xs">Erro ao conectar com a IA. Tente novamente mais tarde.</p>`;
+            }
+        }
+
+        // --- TEXT TO SPEECH ✨ ---
+        async function ouvirDica(texto) {
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: `Diga de forma amigável, profissional e com sotaque do Brasil: ${texto}` }] }],
+                        generationConfig: { 
+                            responseModalities: ["AUDIO"],
+                            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } } 
+                        }
+                    })
+                });
+                
+                const data = await response.json();
+                const base64Audio = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+                
+                if (base64Audio) {
+                    const audioBlob = pcmToWav(base64Audio, 24000);
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audio = new Audio(audioUrl);
+                    audio.play();
+                }
+            } catch (e) {
+                console.error("Erro TTS:", e);
+            }
+        }
+
+        function pcmToWav(base64, sampleRate) {
+            const binaryString = window.atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+            
+            const wavHeader = new ArrayBuffer(44);
+            const view = new DataView(wavHeader);
+            
+            const writeString = (offset, string) => {
+                for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
+            };
+
+            writeString(0, 'RIFF');
+            view.setUint32(4, 36 + len, true);
+            writeString(8, 'WAVE');
+            writeString(12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, 1, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * 2, true);
+            view.setUint16(32, 2, true);
+            view.setUint16(34, 16, true);
+            writeString(36, 'data');
+            view.setUint32(40, len, true);
+
+            return new Blob([wavHeader, bytes], { type: 'audio/wav' });
+        }
+
+        // --- FUNÇÕES UTILITÁRIAS ---
+        function mostrarAlertaFase(mensagem, proximaFuncao) {
+            gameContent.innerHTML = `
+                <div class="fade-in py-10">
+                    <h2 class="text-2xl font-bold text-slate-700 mb-6">${mensagem}</h2>
+                    <button onclick="iniciarProximaFase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition duration-200">
+                        Continuar ➔
+                    </button>
+                </div>
+            `;
+            window.iniciarProximaFase = proximaFuncao;
+        }
+
+        function mostrarFeedbackTemporario(mensagem, proximaFuncao, corTexto = "text-blue-600") {
+            gameContent.innerHTML = `
+                <div class="fade-in py-12">
+                    <h3 class="text-xl font-bold ${corTexto} mb-2 text-center px-4">${mensagem}</h3>
+                </div>
+            `;
+            setTimeout(proximaFuncao, 2000);
+        }
+
+        // --- INICIALIZAÇÃO ---
+        gameContent.innerHTML = `
+            <div class="fade-in">
+                <div class="text-5xl mb-4">🏦</div>
+                <h1 class="text-3xl font-bold text-blue-600 mb-4">Finanças Inteligentes</h1>
+                <p class="text-slate-600 mb-4">Bem-vindo! Você acabou de receber seu salário mensal de <b>R$ 1000,00</b>.</p>
+                <p class="text-slate-600 mb-8">Pague suas despesas e tente chegar ao fim do mês com dinheiro para investir.</p>
+                <button onclick="iniciarJogo()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-200 shadow-md">
+                    Começar o Jogo
+                </button>
+            </div>
+        `;
+
+    </script>
+</body>
+</html>
