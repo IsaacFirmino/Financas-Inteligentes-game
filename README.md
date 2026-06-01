@@ -69,7 +69,7 @@ Por se tratar de uma aplicação puramente estática Front-End, você não preci
 1. Clone o repositório para a sua máquina:
 
 ```bash
-    git clone [https://github.com/seu-usuario/financas-inteligentes.git](https://github.com/seu-usuario/financas-inteligentes.git)
+    git clone : (https://github.com/IsaacFirmino/Financas-Inteligentes-game)
     ```
 2.  Navegue até a pasta do projeto:
 ```bash
