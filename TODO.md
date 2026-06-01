@@ -9,3 +9,10 @@
 - [x] Atualizar styles.css: estilos do modal (bonito e alinhado)
 
 - [x] Testar no navegador: fluxo completo (abrir -> nome -> jogar -> finalizar -> ver ranking com nome)
+
+- [x] Substituir localStorage por backend (Python Flask) para ranking ao vivo via polling
+- [x] Atualizar script.js para enviar score ao backend e buscar ranking periodicamente
+- [x] Adicionar servidor: server.py (SQLite local)
+- [ ] Testar: abrir 2 abas/navegadores em PCs do laboratório e ver ranking atualizar automaticamente
+
+

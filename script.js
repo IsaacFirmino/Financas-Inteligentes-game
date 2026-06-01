@@ -244,13 +244,14 @@ function normalizeName(name) {
         .slice(0, 24);
 }
 
-function loadRankingFromStorage() {
+async function fetchLeaderboard() {
+    const url = "http://127.0.0.1:5000/api/leaderboard";
     try {
-        const raw = localStorage.getItem(STORAGE_KEYS.ranking);
-        if (!raw) return [];
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return [];
-        return parsed
+        const res = await fetch(url, { method: "GET", cache: "no-store" });
+        if (!res.ok) return [];
+        const data = await res.json();
+        const top5 = Array.isArray(data?.top5) ? data.top5 : [];
+        return top5
             .filter((p) => p && typeof p.name === "string" && typeof p.score === "number")
             .map((p) => ({ name: p.name, score: p.score }));
     } catch {
@@ -258,29 +259,27 @@ function loadRankingFromStorage() {
     }
 }
 
-function saveRankingToStorage(top5) {
+async function submitScoreToBackend(finalScore) {
+    const url = "http://127.0.0.1:5000/api/score";
+    if (!playerName) return false;
+
     try {
-        localStorage.setItem(STORAGE_KEYS.ranking, JSON.stringify(top5));
+        const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: playerName, score: finalScore })
+        });
+        return res.ok;
     } catch {
-        // ignore
+        return false;
     }
 }
 
-function updateTop5ForPlayer(finalScore) {
-    const stored = loadRankingFromStorage();
-    const currentEntry = { name: playerName || "Aluno", score: finalScore };
-    const merged = [...stored, currentEntry]
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 5);
+let rankingInFlight = false;
 
-    saveRankingToStorage(merged);
-    return merged;
-}
-
-function renderRanking() {
-    const stored = loadRankingFromStorage();
-
-    // mostra o ranking atual com o aluno em tempo real (antes de terminar)
+async function renderRanking() {
+    // fallback visual enquanto backend não responde
+    const stored = await fetchLeaderboard();
     const currentPlayerEntry = playerName
         ? { name: playerName, score: state.score, current: true }
         : null;
@@ -299,6 +298,18 @@ function renderRanking() {
             <span class="rank-score">${player.score} XP</span>
         </li>`).join("");
 }
+
+async function renderRankingSafe() {
+    if (rankingInFlight) return;
+    rankingInFlight = true;
+    try {
+        await renderRanking();
+    } finally {
+        rankingInFlight = false;
+    }
+}
+
+
 
 
 function setStage(step) {
@@ -423,12 +434,11 @@ function finishGame() {
     state.stepIndex = steps.length;
     unlockFinalBadges();
 
-    // registra resultado no top 5
-    const top5 = updateTop5ForPlayer(state.score);
-    updateDashboard();
-
+    // envia score ao backend (ranking ao vivo)
+    submitScoreToBackend(state.score).finally(() => updateDashboard());
 
     const health = financialHealth();
+
     ui.phaseKicker.textContent = "Relatório final";
     ui.stageTitle.textContent = health.title;
     ui.conceptTag.textContent = "Revisão";
@@ -650,7 +660,15 @@ function init() {
     initializeTheme();
     renderWelcome();
     updateDashboard();
+
+    // ranking ao vivo (polling)
+    setInterval(() => {
+        // atualiza sem criar múltiplas requisições em paralelo
+        renderRankingSafe();
+    }, 2000);
+
 }
+
 
 
 init();
